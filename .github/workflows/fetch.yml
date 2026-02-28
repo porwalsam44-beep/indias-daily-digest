@@ -1,0 +1,27 @@
+name: Auto Fetch News
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # every hour
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: npm install node-fetch@2
+
+      - name: Run Fetch Script
+        run: node fetch.js
+        env:
+          YT_KEY: ${{ secrets.YT_KEY }}
+          FB_PROJECT: ${{ secrets.FB_PROJECT }}
