@@ -25,3 +25,5 @@ jobs:
         env:
           YT_KEY: ${{ secrets.YT_KEY }}
           FB_PROJECT: ${{ secrets.FB_PROJECT }}
+          FB_API_KEY: ${{ secrets.FB_API_KEY }}
+          
