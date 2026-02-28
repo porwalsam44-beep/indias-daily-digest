@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+const fetch = require("node-fetch");
 
 const YT_KEY = process.env.YT_KEY;
 const FIREBASE_PROJECT = process.env.FB_PROJECT;
@@ -13,14 +13,13 @@ async function fetchYouTube() {
 }
 
 async function saveToFirestore(video) {
-
   const firestoreURL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/news`;
 
   const body = {
     fields: {
       videoId: { stringValue: video.id.videoId },
       title: { stringValue: video.snippet.title },
-      description: { stringValue: video.snippet.description.substring(0,200) },
+      description: { stringValue: video.snippet.description.substring(0, 200) },
       channel: { stringValue: video.snippet.channelTitle },
       date: { stringValue: new Date(video.snippet.publishedAt).toLocaleString() }
     }
