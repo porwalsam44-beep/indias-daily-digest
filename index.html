@@ -9,7 +9,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{
   background:black;
-  font-family:system-ui;
+  font-family:system-ui,-apple-system;
   overflow-y:scroll;
   scroll-snap-type:y mandatory;
 }
@@ -30,8 +30,16 @@ body{
   left:0;
   width:100%;
   padding:25px;
-  background:linear-gradient(to top,rgba(0,0,0,0.8),transparent);
+  background:linear-gradient(to top,rgba(0,0,0,0.85),transparent);
   color:white;
+}
+.category{
+  display:inline-block;
+  padding:5px 12px;
+  background:#ff2e2e;
+  border-radius:20px;
+  font-size:12px;
+  margin-bottom:10px;
 }
 .title{
   font-size:18px;
@@ -41,14 +49,6 @@ body{
 .meta{
   font-size:13px;
   opacity:0.8;
-}
-.category{
-  display:inline-block;
-  padding:4px 10px;
-  background:#ff2e2e;
-  border-radius:20px;
-  font-size:12px;
-  margin-bottom:10px;
 }
 .actions{
   position:absolute;
@@ -89,21 +89,14 @@ body{
   50%{opacity:1;transform:translate(-50%,-50%) scale(1.3)}
   100%{opacity:0;transform:translate(-50%,-50%) scale(1)}
 }
-.progress{
-  position:absolute;
-  top:0;
-  left:0;
-  height:4px;
-  background:#ff2e2e;
-  width:0%;
-  transition:width 0.1s linear;
-}
 </style>
 </head>
 
 <body>
 
 <div id="reels"></div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
 
 <script type="module">
 
@@ -119,36 +112,52 @@ const firebaseConfig = {
   appId: "1:889325825355:web:1a2778a1542cbc60490cce"
 };
 
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 let players = [];
+let feedData = [];
 let activeIndex = 0;
 
-async function load() {
+/* =========================
+   LOAD + SMART ALGORITHM
+========================= */
+
+async function loadFeed() {
   const snapshot = await getDocs(collection(db,"news"));
-  const data=[];
-  snapshot.forEach(doc=>data.push(doc.data()));
-  data.forEach(n=>{
-  const hoursOld = (Date.now() - new Date(n.publishedAt)) / 3600000;
-  const recencyScore = Math.max(0, 48 - hoursOld);   // newer = higher
-  const randomness = Math.random() * 10;
-  const categoryBoost = n.category === "Crime" ? 5 : 0;
+  feedData = [];
+  snapshot.forEach(doc => feedData.push(doc.data()));
 
-  n.algorithmScore = recencyScore + randomness + categoryBoost;
-});
+  // Smart ranking
+  feedData.forEach(n=>{
+    const hoursOld = (Date.now() - new Date(n.publishedAt)) / 3600000;
+    const recencyScore = Math.max(0, 48 - hoursOld);
+    const randomness = Math.random() * 10;
+    const categoryBoost = n.category === getPreferredCategory() ? 8 : 0;
+    n.algorithmScore = recencyScore + randomness + categoryBoost;
+  });
 
-data.sort((a,b)=> b.algorithmScore - a.algorithmScore);
-  render(data);
+  feedData.sort((a,b)=> b.algorithmScore - a.algorithmScore);
+
+  // Shuffle top 15 for dynamic refresh
+  feedData = feedData.slice(0,15).sort(()=>Math.random()-0.5);
+
+  render();
 }
 
-function render(data){
+/* =========================
+   RENDER
+========================= */
+
+function render(){
   const container=document.getElementById("reels");
   container.innerHTML="";
-  data.forEach((n,i)=>{
+  players=[];
+
+  feedData.forEach((n,i)=>{
     container.innerHTML+=`
       <div class="reel" data-index="${i}">
-        <div class="progress"></div>
         <div class="player" id="player-${i}"></div>
         <div class="overlay">
           <div class="category">${n.category}</div>
@@ -164,14 +173,17 @@ function render(data){
     `;
   });
 
-  loadYouTube(data);
-  setupObserver();
+  initPlayers();
+  observeReels();
 }
 
-function loadYouTube(data){
-  players=[];
-  data.forEach((n,i)=>{
-    const player = new YT.Player(`player-${i}`,{
+/* =========================
+   YOUTUBE PLAYER CONTROL
+========================= */
+
+function initPlayers(){
+  feedData.forEach((n,i)=>{
+    players[i] = new YT.Player(`player-${i}`,{
       videoId:n.videoId,
       playerVars:{
         autoplay:0,
@@ -180,11 +192,10 @@ function loadYouTube(data){
         rel:0
       }
     });
-    players.push(player);
   });
 }
 
-function setupObserver(){
+function observeReels(){
   const reels=document.querySelectorAll(".reel");
   const observer=new IntersectionObserver(entries=>{
     entries.forEach(entry=>{
@@ -192,26 +203,38 @@ function setupObserver(){
       if(entry.isIntersecting){
         activeIndex=index;
         play(index);
-      } else {
-        pause(index);
+        pauseOthers(index);
       }
     });
-  },{threshold:0.7});
+  },{threshold:0.75});
   reels.forEach(r=>observer.observe(r));
 }
 
 function play(i){
-  if(players[i] && players[i].playVideo)
+  if(players[i]?.playVideo)
     players[i].playVideo();
 }
-function pause(i){
-  if(players[i] && players[i].pauseVideo)
-    players[i].pauseVideo();
+
+function pauseOthers(active){
+  players.forEach((p,i)=>{
+    if(i!==active && p?.pauseVideo)
+      p.pauseVideo();
+  });
 }
+
+/* =========================
+   USER BEHAVIOR TRACKING
+========================= */
 
 window.toggleLike=function(el){
   el.classList.toggle("active");
+  const category = feedData[activeIndex].category;
+  localStorage.setItem("preferredCategory",category);
 };
+
+function getPreferredCategory(){
+  return localStorage.getItem("preferredCategory") || "None";
+}
 
 document.addEventListener("dblclick",e=>{
   const reel=e.target.closest(".reel");
@@ -221,13 +244,17 @@ document.addEventListener("dblclick",e=>{
   setTimeout(()=>heart.classList.remove("show"),600);
 });
 
-window.onYouTubeIframeAPIReady=function(){};
+/* =========================
+   AUTO REFRESH EVERY 60s
+========================= */
 
-const tag=document.createElement("script");
-tag.src="https://www.youtube.com/iframe_api";
-document.body.appendChild(tag);
+setInterval(()=>{
+  loadFeed();
+},60000);
 
-load();
+/* ========================= */
+
+loadFeed();
 
 </script>
 
