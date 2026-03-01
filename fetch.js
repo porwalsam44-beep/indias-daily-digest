@@ -4,9 +4,13 @@ const YT_KEY = process.env.YT_KEY;
 const FIREBASE_PROJECT = process.env.FB_PROJECT;
 const FIREBASE_API_KEY = process.env.FB_API_KEY;
 
+/* =========================
+   FETCH FROM YOUTUBE
+========================= */
 
 async function fetchYouTube() {
-  const url = `https://www.googleapis.com/youtube/v3/search?key=${YT_KEY}&q=india breaking news&part=snippet,id&type=video&order=date&maxResults=25`;
+
+  const url = `https://www.googleapis.com/youtube/v3/search?key=${YT_KEY}&q=india breaking news crime accident politics&part=snippet,id&type=video&order=date&maxResults=25`;
 
   const res = await fetch(url);
   const data = await res.json();
@@ -16,47 +20,18 @@ async function fetchYouTube() {
     return [];
   }
 
-  const items = data.items || [];
-
-  const uniqueChannels = new Set();
-  const filtered = [];
-
-  for (let video of items) {
-
-    const channel = video.snippet.channelTitle;
-
-    // Skip long headline shows
-    const title = video.snippet.title.toLowerCase();
-    if (
-      title.includes("top headlines") ||
-      title.includes("full bulletin") ||
-      title.includes("live") ||
-      title.includes("today news")
-    ) continue;
-
-    // Allow only one video per channel
-    if (!uniqueChannels.has(channel)) {
-      uniqueChannels.add(channel);
-      filtered.push(video);
-    }
-
-    if (filtered.length >= 10) break;
-  }
-
-  return filtered;
+  return data.items || [];
 }
-function detectCategory(title) {
-  title = title.toLowerCase();
 
-  if (title.includes("crime") || title.includes("murder")) return "Crime";
-  if (title.includes("accident")) return "Accident";
-  if (title.includes("politics") || title.includes("election")) return "Politics";
-  return "General";
-}
+/* =========================
+   SAVE TO FIRESTORE
+========================= */
 
 async function saveToFirestore(video) {
+
   const videoId = video.id.videoId;
-  const category = detectCategory(video.snippet.title);
+
+  if (!videoId) return;
 
   const firestoreURL =
     `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/news/${videoId}?key=${FIREBASE_API_KEY}`;
@@ -65,12 +40,10 @@ async function saveToFirestore(video) {
     fields: {
       videoId: { stringValue: videoId },
       title: { stringValue: video.snippet.title },
-      description: { stringValue: video.snippet.description.substring(0,200) },
+      description: { stringValue: video.snippet.description || "" },
       channel: { stringValue: video.snippet.channelTitle },
       thumbnail: { stringValue: video.snippet.thumbnails.high.url },
-      category: { stringValue: category },
-      publishedAt: { stringValue: video.snippet.publishedAt },
-      trendingScore: { integerValue: Date.now() }
+      publishedAt: { stringValue: video.snippet.publishedAt }
     }
   };
 
@@ -83,14 +56,17 @@ async function saveToFirestore(video) {
   console.log("Saved:", videoId);
 }
 
+/* =========================
+   MAIN RUNNER
+========================= */
+
 async function run() {
+
   const videos = await fetchYouTube();
 
   for (let video of videos) {
-    if (!video.id.videoId) continue;
     await saveToFirestore(video);
   }
-
 
   console.log("Fetch complete");
 }
