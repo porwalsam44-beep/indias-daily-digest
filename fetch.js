@@ -4,7 +4,6 @@ const YT_KEY = process.env.YT_KEY;
 const FIREBASE_PROJECT = process.env.FB_PROJECT;
 const FIREBASE_API_KEY = process.env.FB_API_KEY;
 
-const MAX_VIDEOS = 40;
 
 async function fetchYouTube() {
   const url = `https://www.googleapis.com/youtube/v3/search?key=${YT_KEY}&q=india breaking news&part=snippet,id&type=video&order=date&maxResults=25`;
@@ -84,34 +83,6 @@ async function saveToFirestore(video) {
   console.log("Saved:", videoId);
 }
 
-async function cleanupOldVideos() {
-  const listURL =
-    `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/news?key=${FIREBASE_API_KEY}`;
-
-  const res = await fetch(listURL);
-  const data = await res.json();
-
-  if (!data.documents) return;
-
-  const docs = data.documents;
-
-  if (docs.length <= MAX_VIDEOS) return;
-
-  const sorted = docs.sort((a, b) =>
-    parseInt(b.fields.trendingScore.integerValue) -
-    parseInt(a.fields.trendingScore.integerValue)
-  );
-
-  const toDelete = sorted.slice(MAX_VIDEOS);
-
-  for (let doc of toDelete) {
-    await fetch(doc.name + `?key=${FIREBASE_API_KEY}`, {
-      method: "DELETE"
-    });
-    console.log("Deleted old:", doc.name);
-  }
-}
-
 async function run() {
   const videos = await fetchYouTube();
 
@@ -120,7 +91,6 @@ async function run() {
     await saveToFirestore(video);
   }
 
-  await cleanupOldVideos();
 
   console.log("Fetch complete");
 }
